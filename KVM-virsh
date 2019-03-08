@@ -1,0 +1,304 @@
+git软件
+  下载git
+    yum -y install git
+  
+  同步内容
+    git clone git://172.40.53.65/nsd1810.git
+    
+  同步内容
+    cd nsd1810
+    git pull
+    
+    cat readme.txt
+    外地校区
+      git clone git://124.207.192.18/nsd1810.git
+
+    北京本地
+      git clone git://172.40.53.65/nsd1810.git
+
+    更新(必须进入 git 目录)
+      git pull
+
+virsh基本管理操作
+  硬件辅助虚拟化(CPU)
+  查看CPU支持虚拟化
+      [root@room9pc01 nsd1810]# cat /proc/cpuinfo | grep vmx
+      
+  KVM是linux的内核模块 
+      [root@room9pc01 nsd1810]# lsmod | awk '/kvm/'
+          kvm_intel             170086  0 
+          kvm                   566340  1 kvm_intel
+          irqbypass              13503  1 kvm
+        //模块提供了CPU及内存支持虚拟化技术
+ 
+  QEMU是一个虚拟化的仿真工具,通过ioctl与内核kvm交互完成对硬件的虚拟化支持
+       [root@room9pc01 nsd1810]# ps -elww | grep qemu
+             
+  Libvirt是一个对虚拟化管理的接口和工具,提供用户端程序virsh,virt-install,virt-manager,virt-view交互
+     qemu-kvm 内核自带软件 提供底层仿真支持
+     通过Libvirtd(守护进程)来管理QEMU进行虚拟化
+     libvirt-client用户端软件
+     libvirt-daemon-driver-quem -连接quem驱动
+     
+     用yum安装以上软件 解决依赖关系 
+     启动守护进程
+     virt-v2v   虚拟机迁移工具
+     virt-p2v   物理机迁移工具
+     
+  虚拟机配置声明文件
+     /etc/libvirt/qemu   一个xml文件
+  硬盘文件
+     /var/lib/libvirt/images/    //稀疏文件
+     
+  步骤一：virsh基本操作
+    virsh 控制命令 [虚拟机名称] [参数]
+    [root@room9pc01 nsd1810]# virsh
+        欢迎使用 virsh，虚拟化的交互式终端。
+        输入：'help' 来获得命令的帮助信息
+          'quit' 退出
+    virsh # help
+    virsh # nodeinfo     //[root@room9pc01 nsd1810]# virsh nodeinfo  查看kvm节点(服务器)信息
+  
+    列出当前正在运行的虚拟机
+      [root@room9pc01 ~]# virsh list [--all]     
+          
+        Id    Name                           State
+      ----------------------------------------------------
+        1     node1                          running
+    
+    virsh net-list [--all] 查看虚拟交换机(虚拟网络)
+    
+    virsh dominfo 虚拟机名称     [root@room9pc01 ~]# virsh dominfo rh7_node01  查看虚拟机信息
+    
+    virsh domiflist node0(虚拟机名称)
+    [root@room9pc01 ~]# virsh domiflist rh7_node01
+            接口     类型     源        型号      MAC
+        -------------------------------------------------------
+        -          network    private1   virtio      52:54:00:ec:02:d2
+        -          network    private2   virtio      52:54:00:d0:84:8c
+        -          network    public1    virtio      52:54:00:73:d9:77
+        -          network    public2    virtio      52:54:00:1a:bd:71
+    
+    virsh start|reboot|shutdown 虚拟机名称  //运行|启动|关闭 指定的虚拟机
+    virsh destroy  虚拟机名称               // 强制关闭指定的虚拟机
+    virsh autostart [--disable] 虚拟机名称  //指定开机自启 可以用dominfo查看状态
+    
+    virsh -c(connect) qemu:///system
+    //远程连接管理KVM  virsh -c(connect) qemu+ssh://root@172.40.52.107/system
+    
+常用镜像盘类型
+               RAW格式      QCOW2格式
+   KVM默认       否            是
+   I/O效率       高            较高
+   占用空间       大             小
+   压缩           不支持         支持
+   后端盘复用      不支持         支持
+   快照           不支持         支持
+   
+qemu-img基本操作管理
+    qemu-img虚拟机磁盘管理命令是,支持非常多的磁盘格式
+            
+  步骤一：创建一个新的镜像盘文件
+    1)qemu-img命令格式：qemu-img 命令 参数 块文件名称 大小
+      常用命令
+      -create   创建
+      -convert  转换
+      -info     查看信息
+      -snapshot 管理快照
+      
+                        //qemu-img create -f 格式 磁盘路径 大小
+      [root@room9pc01 ~]# qemu-img create   -f qcow2 disk.img 50G    //qcow2为创建的格式 
+      Formatting 'disk.img', fmt=qcow2 size=53687091200 encryption=off cluster_size=65536 lazy_refcounts=off
+      [root@room9pc01 ~]# qemu-img info disk.img 
+        image: disk.img
+        file format: qcow2
+        virtual size: 50G (53687091200 bytes)
+        disk size: 196K
+        cluster_size: 65536
+        Format specific information:
+        compat: 1.1
+        lazy refcounts: false
+
+    2）使用后端模板文件创建一个新的镜像盘文件
+      COW技术原理                   //虚拟化核心方式
+      copy on write , 写时复制
+      直接映射原始盘数据
+      当发生数据修改时(写操作),自动将数据从后端盘存入前端盘
+      前端盘修改数据不会回写入后端盘
+      
+      [root@room9pc01 images]# qemu-img create -f qcow2 -b node.qcow2 node1.img 20G    //-b 指定后端盘
+      Formatting 'node1.img', fmt=qcow2 size=21474836480 backing_file='node.qcow2' encryption=off 
+      cluster_size=65536 lazy_refcounts=off 
+     
+  步骤二：查看镜像文件的信息
+      [root@room9pc01 images]# qemu-img info node1.img 
+        image: node1.img
+        file format: qcow2
+        virtual size: 20G (21474836480 bytes)
+        disk size: 196K
+        cluster_size: 65536
+        backing file: node.qcow2          //查看后端盘
+        Format specific information:
+        compat: 1.1
+        lazy refcounts: false
+      
+创建一个虚拟网络
+  步骤一：创建一个名为vbr的虚拟网络
+        [root@room9pc01 ~]# vim  /etc/libvirt/qemu/networks/vbr.xml
+        <network>
+        <name>vbr</name>                //vbr为虚拟网络的名字
+        <bridge name="vbr" stp="on" delay="on" />  //ifconfig 查询的名字  stp生成树协议开启  延迟规则开启
+        <domain name="vbr" />
+        <forward mode="nat"/>                //转发模式
+        <ip address="192.168.1.254" netmask="255.255.255.0">        //ip为192.168.1.254
+          <dhcp>                                                     //dhcp分配ip
+            <range start="192.168.1.100" end="192.168.1.200"/>     //ip范围是100-200
+          </dhcp>
+        </ip>
+        </network>
+    
+  步骤二：启动vbr虚拟网络并用ifconfig验证
+        [root@room9pc01 ~]# virsh net-define vbr        //定义vbr虚拟网络
+        [root@room9pc01 ~]# virsh net-list vbr           //查看
+        [root@room9pc01 ~]# virsh net-start vbr      //启动vbr虚拟网络
+        [root@room9pc01 ~]# ifconfig                //igconfig验证 
+         vbr: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+            inet 192.168.1.254  netmask 255.255.255.0  broadcast 192.168.1.255
+            ether 52:54:00:b7:1c:10  txqueuelen 1000  (Ethernet)
+            RX packets 2460  bytes 176958 (172.8 KiB)
+            RX errors 0  dropped 0  overruns 0  frame 0
+            TX packets 1948  bytes 532542 (520.0 KiB)
+            TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+            
+  步骤三：设置vbr虚拟网络开机自启动
+        [root@room9pc01 ~]# virsh net-autostart vbr
+        
+  常用命令
+        net-list [--all]
+        net-define 路径/vbr.xml
+        net-undefine vbr     删除虚拟交换机
+        net-start vbr    启动虚拟交换机
+        net-destroy vbr  关闭虚拟交换机
+        net-edit vbr   编辑虚拟交换机
+        net-autostart vbr  开机自启
+          
+xml管理   
+    网站：libvirt.org
+    虚拟机xml配置文件 /etc/libvirt/qemu/虚拟机名.xml
+    查看虚拟机的配置文件 [root@room9pc01]# virsh  dumpxml  node1
+         <domain type='kvm'>
+          <name>node</name>                                     // vish list 下名称
+            <memory unit='KB'>1524000</memory>                  //虚拟机内存信息
+              <currentMemory unit='KB'>1524000</currentMemory>   
+              <vcpu placement='static'>2</vcpu>                  //定义虚拟机cpu内核
+            <os>                                               //操作系统信息
+              <type arch='x86_64' machine='pc'>hvm</type>           
+              <boot dev='hd'/>                                 //启动项设置
+              <bootmenu enable='yes'/>                         //启动选项打开
+              <bios useserial='yes'/>                          //bios接口打开
+            </os>
+            <features>                    //电源管理
+              <acpi/>
+              <apic/>
+            </features>
+            <cpu mode='host-passthrough'>    //cpu运行模式
+            </cpu>
+            <clock offset='localtime'/>           //虚拟机时间 按本地物理机时间
+            <on_poweroff>destroy</on_poweroff>    //模拟按钮
+            <on_reboot>restart</on_reboot>
+            <on_crash>restart</on_crash>
+            <devices>                                    //设备仿真
+              <emulator>/usr/libexec/qemu-kvm</emulator>
+              <disk type='file' device='disk'>              //磁盘仿真
+                <driver name='qemu' type='qcow2'/>        
+                <source file='/var/lib/libvirt/images/node.img'/>   //定义磁盘文件名
+                <target dev='vda' bus='virtio'/>
+              </disk>
+              <interface type='bridge'>                  //网卡仿真
+                <source bridge='vbr'/>                   //定义虚拟交换机
+                <model type='virtio'/>
+              </interface>
+              <channel type='unix'>
+                <target type='virtio' name='org.qemu.guest_agent.0'/>    //虚拟机指令
+              </channel>
+              <serial type='pty'></serial>
+              <console type='pty'>                //console终端 不受网络影响 提供命令  virsh console 虚拟机名
+                <target type='serial'/>
+              </console>
+              <memballoon model='virtio'></memballoon>
+            </devices>
+          </domain>
+          
+          virsh define node1
+          virsh start node1
+          virsh console node1
+             
+  步骤一：导出虚拟机xml的配置文件
+    [root@room9pc01 ~]# cd /etc/libvirt/qemu/
+    [root@room9pc01 qemu]# virsh  dumpxml  node1
+    [root@room9pc01 qemu]# virsh  dumpxml  node1 > node.xml     
+    //导出虚拟机node1的配置文件为node.xml
+    [root@room9pc01 qemu]# lsnode.xml
+    
+    [root@room9pc01 qemu]# virsh edit node1            
+    <domain type='kvm'>
+      <name>node1</name>                        //node1为虚拟机的名称，可以随意修改
+      <uuid>76d5dc2c-5eef-4e30-8b6c-e58851814f84</uuid>  //uuid可以去掉
+      <memory unit='KiB'>2048000</memory>                //内存大小可以调整
+      <currentMemory unit='KiB'>2048000</currentMemory>
+      <disk type='file' device='disk'>
+          <source file='/var/lib/libvirt/images/rhel7.2.qcow2'/>        //后端盘路径
+       .. ..
+      <interface type='network'>
+          <mac address='52:54:00:91:52:e4'/>            
+    //mac地址和带有address字样的全部去掉
+       .. ..
+       
+  步骤二：重新定义虚拟机
+    [root@room9pc01 qemu]# virsh define node1.xml
+  
+安装虚拟机
+
+  步骤一：配置网络yum源(制作后端盘)
+  步骤二：安装一个虚拟机
+  步骤三：制作一个虚拟机模板
+    1）禁用selinux
+    2）卸载防火墙与NetworkManager
+    3）配置yum源
+    4）导入公钥
+    5）配置网卡
+    6）禁用空路由
+    7）添加console配置
+    8）重新生成grub.cfg
+    9）安装扩展分区软件
+    10）第一次开机自动扩容
+    11）关闭虚拟机后执行信息清理工作
+   
+离线访问虚拟机问题
+  步骤一：用xml生成一个新的虚拟机
+    [root@room9pc01 ~]# cd /etc/libvirt/qemu/
+    [root@room9pc01 qemu]# cp centos7.0.xml  local.xml
+    [root@room9pc01 qemu]# vim local.xml 
+    <domain type='kvm'>
+      <name>local</name>        //修改名字
+      <memory unit='KiB'>2048000</memory>        //修改内存
+      <currentMemory unit='KiB'>2048000</currentMemory>
+    ...
+      <source file='/var/lib/libvirt/images/local.img'/>     //img文件位置
+      
+    [root@room9pc01 ~]# cd /var/lib/libvirt/images/
+    [root@room9pc01 images]# qemu-img  create –b node.qcow2 –f qcow2 local.img
+    [root@room9pc01 images]# virsh define /etc/libvirt/qemu/local.xml
+    [root@room9pc01 images]# virsh start local
+    [root@room9pc01 images]# virsh console local
+      
+  步骤二：guestmount实现离线访问
+    基本用法：guestmount -a 虚拟机磁盘路径 -i /挂载点
+      -a：指定虚拟磁盘
+      -i：挂载点
+        [root@room9pc01 ~]# mkdir /mnt/kdisk
+        [root@room9pc01 ~]# guestmount  -a  node1.qcow2  -i  /mnt/kdisk
+        [root@room9pc01 ~]# cd /mnt/kdisk
+        [root@room9pc01 kdisk]#  ls      /虚拟机的根下目录 chroot ..
+        bin       home      media      opt        sbin     tmp
+boot lib misc proc selinux usr

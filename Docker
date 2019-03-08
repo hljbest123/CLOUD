@@ -1,0 +1,280 @@
+容器技术
+  容器技术已成为应用程序封装和交付的核心技术
+  容器技术不是虚拟化,是对资源的切分及隔离,使用
+  技术的核心组成：
+    Cgroups (control groups) -资源管理
+    NameSpace 进程隔离
+    SELinx 安全
+    
+Docker
+  Docker时一套完整的容器管理系统
+  Docker提供了一组命令,让用户更方便的使用容器技术,而不用关心内核
+  
+安装docker
+  制作自定义yum源
+  安装docker
+  
+镜像的基本操作
+  docker镜像
+    docker中容器基于镜像启动
+    镜像是启动容器的核心
+    镜像采用分层设计
+    使用快照COW技术,确保底层数据不丢失
+    docker 子命令 子命令参数
+    docker help 子命令                   //docker help push 查看上传命令
+    man docker-子命令
+    [root@docker01 ~]# docker images   // 列出可使用的镜像
+    REPOSITORY          TAG                 IMAGE ID            CREATED             SIZE
+    busybox             latest              d8233ab899d4        3 days ago          1.199 MB
+     Repository+tag 镜像+标签 唯一性
+    
+   查看docker镜像库 
+    docker hub 镜像仓库
+    http://hub.docker.com   //官方提供的镜像仓库  
+    [root@docker01 ~]# docker search nginx //主机连接互联网 可以直接用该命令查找
+    名称                        描述                                            下载次数   是否是官方    自动化
+    NAME                       DESCRIPTION                                     STARS     OFFICIAL   AUTOMATED
+    nginx                      Official build of Nginx.                        10918     [OK]       
+    jwilder/nginx-proxy        Automated Nginx reverse proxy for docker c...   1533                 [OK]
+  
+  下载镜像
+    [root@docker01 ~]# docker pull 镜像的名称
+    
+  镜像的保存与导入
+   docker save | load
+   备份保存,生成的是tar文件包
+   [root@docker01 ~]# docker save busybox:latest > busybox.tar
+   [root@docker01 ~]# ls
+    busybox.tar                 //生成在当前路径下
+   [root@docker01 ~]# scp busybox.tar 192.168.1.12:/root/
+    root@192.168.1.12's password: 
+    busybox.tar        100% 1392KB  29.1MB/s   00:00
+    导入已生成的tar文件包
+   [root@docker02 ~]# docker load < busybox.tar
+    adab5d09ba79: Loading layer [==================================================>] 1.416 MB/1.416 MB
+    Loaded image: busybox:latest
+   
+ 启动容器命令
+   docker run -it 镜像的名称:标签 命令     //命令为镜像内的命令
+    没有命令输入的时候 就会启动默认命令   //有默认启动命令为进程服务
+    latest 是默认标签
+ 
+ 查看正在运行中的容器
+  [root@docker01 ~]# docker ps
+  CONTAINER ID   IMAGE        COMMAND     CREATED       STATUS       PORTS           NAMES
+  080bf2b7f6fa   nginx:latest "/bin/bash" 8 seconds ago Up 5 seconds 80/tcp, 443/tcp berserk_swirles
+    
+  [root@docker01 ~]# docker ps -a    //--all 显示所有
+    
+ 其他镜像命令列表
+  docker history                  //记录容器每一次映射的记录内容 显示镜像层及制作过程
+  docker inspect                  //查看容器底层详细信息
+  docker rmi                      //remove image 删除本地镜像
+  docker tag                      //修改镜像名称及标签 类似于软连接
+  
+容器的常用命令
+  docker run                  //运行容器
+         -i 交互
+         -t 终端
+         -d 后台进程         
+  [root@docker01 ~]# docker run -itd nginx
+  14f595a865e49936ae2056b1c03a422ff2d0df3cd39b090db777bf1f9d778f6b
+  docker ps                   //查看容器列表
+  [root@docker01 ~]# docker ps
+CONTAINER ID   IMAGE         COMMAND                  CREATED             STATUS              PORTS               NAMES
+14f595a865e4   nginx         "nginx -g 'daemon off"   5 seconds ago       Up 3 seconds        80/tcp, 443/tcp     elegant_perlman
+080bf2b7f6fa   nginx:latest  "/bin/bash"              About an hour ago   Up About an hour    80/tcp, 443/tcp     berserk_swirles
+  
+  docker stop                 //关闭容器
+  docker start/restart                //启动已有的docker容器 docker ps -a 查看
+  docker inspect
+  docker top                        //查看容器的进程列表  相当于在容器里执行docker ps
+  docker rm                          // 删除容器
+  docker attach|exec                //进入容器
+  [root@docker01 ~]# docker exec -it 14f595a865e4 /bin/bash   //未使用容器的上帝进程开启bash
+  root@14f595a865e4:/#
+  docker attach 14f595a865e4     //不关闭上帝进程 ctrl+p+Q
+
+自定义镜像
+  a)docker run -it centos  修改内容增改
+  b)ctrl+p+q 
+  c)docker commit 60637e52f298 myos:label    //commit ID
+  d)docker images    
+  e)docker history ID
+
+Dockerfile文件
+ 语法格式
+  FROM:基础镜像
+  MAINTAINER:镜像创建者信息
+  EXPOSE:开放端口
+  ENV:设置变量
+  ADD:复制文件到镜像
+  RUN:制作镜像的执行命令
+  WORKDIR:定义容器的工作目录
+  CMD:容器启动时执行命令, 仅有一条CMD
+  
+  [root@docker1 ~]# mkdir oo
+  [root@docker1 ~]# cd oo
+  [root@docker1 oo]# touch Dockerfile    //Dockerfile文件第一个字母要大写
+  [root@docker1 oo]# cp /etc/yum.repos.d/local.repo  ./
+  [root@docker1 oo]# vi Dockerfile
+  FROM  myos:v1
+  RUN rm -f /etc/yum.repos.d/*
+  ADD local.repo /etc/yum.repos.d/local.repo
+  RUN yum -y install httpd
+  ENV EnvironmentFile=/etc/sysconfig/httpd
+  WORKDIR /var/www/html/            //定义容器默认工作目录
+  RUN echo "test" > /var/www/html/index.html
+  EXPOSE 80                //设置开放端口号
+  CMD ["/usr/sbin/httpd", "-DFOREGROUND"]   //修改命令的默认启动方式
+  [root@docker1 oo]# docker build -t myos:http .   //注意 .是一个参数 代表当前目录
+  [root@docker1 oo]# docker run -d  myos:http 
+  d9a5402709b26b42cd304c77be442559a5329dc784ec4f6c90e4abac1c88e206
+  [root@docker1 oo]# docker inspect d9
+  [root@docker1 oo]# curl 172.17.0.7
+  
+自定义镜像服务                      //container容器 Environment环境
+  共享镜像的一台服务器
+  配置docker01共享镜像仓库
+  vim /etc/docker/daemon.json
+  {
+    "insecure-registries" : ["192.168.1.10:5000"]    //使用私有仓库运行容器  registry 登录库
+  }
+  [root@docker1 oo]# systemctl restart docker
+  [root@docker1 oo]# docker run -d -p 5000:5000 registry
+  273be3d1f3280b392cf382f4b74fea53aed58968122eff69fd016f638505ee0e
+  [root@docker1 oo]# curl 192.168.1.10:5000/v2/
+  {}    //出现括号
+  [root@docker1 oo]# docker tag busybox:latest 192.168.1.10:5000/busybox:latest  
+  //打标签
+  [root@docker1 oo]# docker push 192.168.1.10:5000/busybox:latest  //上传
+  [root@docker1 oo]# docker tag myos:http 192.168.1.10:5000/myos:http
+  [root@docker1 oo]# docker push  192.168.1.10:5000/myos:http
+  
+  在客户端上的操作
+  [root@docker2 ~]# scp 192.168.1.10:/etc/docker/daemon.json  /etc/docker/
+  [root@docker2 ~]# systemctl restart docker
+  [root@docker2 ~]# docker images
+  [root@docker2 ~]# docker run -it 192.168.1.10:5000/myos:http /bin/bash    
+  //直接启动
+  
+查看私有仓库 
+  [root@docker1 oo]# curl  http://192.168.1.10:5000/v2/_catalog  //查看镜像
+    {"repositories":["busybox","myos"]}
+  [root@docker1 oo]# curl  http://192.168.1.10:5000/v2/busybox/tags/list  //查看镜像标签 
+    {"name":"busybox","tags":["latest"]}
+  [root@docker1 oo]# curl  http://192.168.1.10:5000/v2/myos/tags/list 
+    {"name":"myos","tags":["http"]}
+
+docker共享卷
+  docker run -it -v /var/webroot:/abc 192.168.1.10:5000/myos:http
+   //真机和容器共享数据,也可以多容器共享
+   网络中通过共享服务器来多容器共享数据
+
+  配置NFS服务器
+    [root@room9pc01 ~]# yum -y install nfs-utils
+    [root@room9pc01 ~]# mkdir /content
+    [root@room9pc01 ~]# vim /etc/exports
+    /content     *(rw，no_root_squash)
+    [root@room9pc01 ~]# systemctl restart nfs-server.service
+    [root@room9pc01 ~]# systemctl restart nfs-secure.service
+    [root@room9pc01 ~]# exportfs  -rv
+    exporting *:/content
+    [root@room9pc01 ~]# chmod 777 /content
+    [root@room9pc01 ~]# echo 11 > /content/index.html
+  
+  配置客户端
+    [root@docker1 oo]# yum -y install nfs-utils
+    [root@docker1 oo]# systemctl restart nfs-server.service
+    [root@docker1 oo]# showmount -e 192.168.1.254
+    Export list for 192.168.1.254:
+    /content *
+    [root@docker1 ~]# mkdir /mnt/qq
+    [root@docker1 ~]# mount -t nfs 192.168.1.254:/content /mnt/qq
+    [root@docker1 ~]# ls /mnt/qq
+    index.html
+    [root@docker1 ~]# cat  /mnt/qq/index.html 
+    11
+    [root@docker1 ~]# docker run  -d -p 80:80 -v /mnt/qq:/var/www/html -it myos:http
+    224248f0df5d795457c43c2a7dad0b7e5ec86abdc3f31d577e72f7929f020e01
+    [root@docker1 ~]# curl 192.168.1.10
+    11
+    [root@docker2 ~]# yum -y install nfs-utils
+    [root@docker2 ~]# showmount -e 192.168.1.254
+    Export list for 192.168.1.254:
+    /content *
+    [root@docker2 ~]# mkdir /mnt/qq
+    [root@docker2 ~]# mount -t nfs 192.168.1.254:/content /mnt/qq
+    [root@docker2 ~]# docker run  -d -p 80:80 -v /mnt/qq:/var/www/html -it 192.168.1.10:5000/myos:http
+    00346dabec2c7a12958da4b7fee6551020249cdcb111ad6a1058352d2838742a
+    [root@docker2 ~]# curl 192.168.1.20
+    11
+    [root@docker1 ~]# touch /mnt/qq/a.sh
+    [root@docker1 ~]# echo 22 > /mnt/qq/index.html
+    [root@docker2 ~]#ls  /mnt/qq/
+    a.sh  index.html
+    [root@docker2 ~]# cat /mnt/qq/index.html 
+    22
+    
+创建自定义网桥
+  bridge-utils  //装包
+  
+  新建Docker网络模型
+   [root@docker01 ~]# docker network --help
+   [root@docker1 ~]# docker  network  create  --subnet=172.30.0.0/16 docker01
+    c9cf26f911ef2dccb1fd1f670a6c51491e72b49133246f6428dd732c44109462
+    [root@docker1 ~]# docker  network  list
+    NETWORK ID          NAME                DRIVER              SCOPE
+    bc189673f959        bridge              bridge              local               
+    6622752788ea        docker01             bridge             local               
+    53bf43bdd584        host                host                local                
+    ac52d3151ba8        none                null                local                
+    [root@docker1 ~]# ip  a   s
+    [root@docker1 ~]# docker  network   inspect   docker01
+  
+  使用自定义网桥启动容器
+    [root@docker1 ~]# docker  run  --network=docker01   -id   nginx
+  
+  端口映射
+    [root@docker1 ~]# docker  run  -p  8080:80  -id  nginx
+    e523b386f9d6194e53d0a5b6b8f5ab4984d062896bab10639e41aef657cb2a53
+    [root@docker1 ~]# curl 192.168.1.10:8080
+    
+  扩展实验
+     [root@docker1 ~]# docker  network   create   --driver  bridge  docker02   
+      //新建一个 名为docker02的网络模型
+      5496835bd3f53ac220ce3d8be71ce6afc919674711ab3f94e6263b9492c7d2cc
+     [root@docker1 ~]# ifconfig     
+      //但是在用ifconfig命令查看的时候，显示的名字并不是docker02，而是br-5496835bd3f5
+      
+     [root@docker1 ~]# docker  network  list            //查看显示docker02
+     
+     [root@docker1 ~]# docker network list   //查看docker0的NETWORK ID（加粗字样）
+      NETWORK ID          NAME                DRIVER              SCOPE
+      bc189673f959        bridge              bridge              local               
+      5496835bd3f5        docker02             bridge             local               
+      53bf43bdd584        host                host                local               
+      ac52d3151ba8        none                null                local               
+  查看信息
+     [root@docker2 ~]# docker network inspect bc189673f959 
+  查看图片的倒数第六行有"com.docker.network.bridge.name": "docker0"字样
+  把刚刚创建的docker02网桥删掉
+  [root@docker1 ~]# docker network rm docker02     //删除docker02
+    docker02
+  [root@docker1 ~]# docker network create  \ 
+    docker02  -o com.docker.network.bridge.name=docker02   
+    //创建docker02网桥
+    648bd5da03606d5a1a395c098662b5f820b9400c6878e2582a7ce754c8c05a3a
+  [root@docker1 ~]# ifconfig     //ifconfig查看有docker02
+  
+  若想在创建docker03的时候自定义网段（之前已经创建过docker01和02，这里用docker03）
+        [root@docker1 ~]# docker network create docker03 --subnet=172.30.0.0/16 -o com.docker.network.bridge.name=docker03
+    f003aa1c0fa20c81e4f73c12dcc79262f1f1d67589d7440175ea01dc0be4d03c
+    [root@docker1 ~]# ifconfig    //ifconfig查看，显示的是自己定义的网段
+    docker03: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500
+            inet 172.30.0.1  netmask 255.255.0.0  broadcast 0.0.0.0
+            ether 02:42:27:9b:95:b3  txqueuelen 0  (Ethernet)
+            RX packets 0  bytes 0 (0.0 B)
+            RX errors 0  dropped 0  overruns 0  frame 0
+            TX packets 0  bytes 0 (0.0 B)
+TX errors 0 dropped 0 overruns 0 carrier 0 collisions 0
